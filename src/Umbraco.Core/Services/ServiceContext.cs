@@ -262,10 +262,5 @@ namespace Umbraco.Core.Services
         /// Gets the ContentTypeServiceBaseFactory.
         /// </summary>
         public IContentTypeBaseServiceProvider ContentTypeBaseServices => _contentTypeBaseServiceProvider.Value;
-
-        public IdkMap GetIdkMap()
-        {
-            return IdkMap;
         }
-    }
 }

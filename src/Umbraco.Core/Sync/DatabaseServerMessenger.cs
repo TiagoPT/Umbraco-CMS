@@ -450,7 +450,7 @@ namespace Umbraco.Core.Sync
             delete = new Sql().Append(@"DELETE FROM umbracoCacheFile WHERE utcStamp < @pruneDate",
                 new { pruneDate });
 
-            _appContext.DatabaseContext.Database.Execute(delete);
+            database.Execute(delete);
         }
 
         /// <summary>

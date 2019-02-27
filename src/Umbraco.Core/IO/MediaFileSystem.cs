@@ -34,6 +34,11 @@ namespace Umbraco.Core.IO
             _logger = logger;
         }
 
+        //public void ResetFolderCounter()
+        //{
+        //    _folderCounterInitialized = false;
+        //}
+
         /// <inheritoc />
         public void DeleteMediaFiles(IEnumerable<string> files)
         {
@@ -43,7 +48,7 @@ namespace Umbraco.Core.IO
             var options = new ParallelOptions { MaxDegreeOfParallelism = 20 };
 
             Parallel.ForEach(files, options, file =>
-            {
+        {
                 try
                 {
                     if (file.IsNullOrWhiteSpace()) return;
@@ -53,11 +58,11 @@ namespace Umbraco.Core.IO
                     var directory = _mediaPathScheme.GetDeleteDirectory(this, file);
                     if (!directory.IsNullOrWhiteSpace())
                         DeleteDirectory(directory, true);
-                }
+        }
                 catch (Exception e)
-                {
+        {
                     _logger.Error<MediaFileSystem>(e, "Failed to delete media file '{File}'.", file);
-                }
+        }
             });
         }
 
@@ -71,7 +76,7 @@ namespace Umbraco.Core.IO
             filename = IOHelper.SafeFileName(filename.ToLowerInvariant());
 
             return _mediaPathScheme.GetFilePath(this, cuid, puid, filename);
-        }
+            }
 
         /// <inheritoc />
         public string GetMediaPath(string filename, string prevpath, Guid cuid, Guid puid)
@@ -124,5 +129,5 @@ namespace Umbraco.Core.IO
         }
 
         #endregion
-    }
+        }
 }

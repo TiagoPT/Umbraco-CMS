@@ -14,31 +14,32 @@ namespace Umbraco.Web.Cache
 {
     public class FileSystemCacheRefresher : CacheRefresherBase<FileSystemCacheRefresher>
     {
-        public static readonly Guid RefresherTypeId = Guid.Parse("3dbae2fa-6094-4d41-8a9a-8cb0f40c78ec");
+        public FileSystemCacheRefresher(AppCaches appCaches)
+            : base(appCaches)
+        { }
 
-        protected override FileSystemCacheRefresher Instance
-        {
-            get { return this; }
-        }
+        protected override FileSystemCacheRefresher This => throw new NotImplementedException();
 
-        public override Guid UniqueIdentifier
-        {
-            get { return RefresherTypeId; }
-        }
+        public static readonly Guid UniqueId = Guid.Parse("3dbae2fa-6094-4d41-8a9a-8cb0f40c78ec");
 
-        public override string Name
-        {
-            get { return "Cache refresher for SyncFileSystemWrapper"; }
-        }
+        public override Guid RefresherUniqueId => UniqueId;
+
+        public override string Name => "Cache refresher for SyncFileSystemWrapper";        
 
         public override void Refresh(int id)
         {
-            Umbraco.Core.Logging.LogHelper.Info<FileSystemCacheRefresher>("Received file update ID {0}", () => id);
+            Composing.Current.Logger.Info(typeof(FileSystemCacheRefresher), "Received file update ID {0}", id);
 
-            var dto = ApplicationContext.Current.DatabaseContext.Database.SingleOrDefault<CacheFileDto>(id);
+            CacheFileDto dto;
+            using (var scope = Composing.Current.ScopeProvider.CreateScope())
+            {
+                dto = scope.Database.SingleOrDefaultById<CacheFileDto>(id);
+                scope.Complete();
+            }
+
             if ( dto != null)
             {
-                Umbraco.Core.Logging.LogHelper.Info<FileSystemCacheRefresher>("Update for path {0}, action {1}, file is {2} bytes", () => dto.Path, () => dto.Action, () => dto.Data.Length);
+                Composing.Current.Logger.Info(typeof(FileSystemCacheRefresher), "Update for path {0}, action {1}, file is {2} bytes", dto.Path, dto.Action, dto.Data.Length);
 
                 string targetPath = System.Web.Hosting.HostingEnvironment.MapPath(dto.Path);
                 var action = (SyncFileSystemWrapper.Action)dto.Action;
@@ -57,8 +58,6 @@ namespace Umbraco.Web.Cache
                     if (!Directory.Exists(directory))
                     {
                         Directory.CreateDirectory(directory);
-                        
-                        FileSystemProviderManager.Current.MediaFileSystem.ResetFolderCounter();
                     }
                     File.WriteAllBytes(targetPath, dto.Data);
                 }

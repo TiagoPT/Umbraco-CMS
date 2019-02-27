@@ -17,6 +17,8 @@ namespace Umbraco.Web.SyncFileSystem
     {
         private readonly IFileSystem _wrapped;
 
+        public bool CanAddPhysical => false;
+
         public SyncFileSystemWrapper(string virtualRoot)
         {
             _wrapped = new PhysicalFileSystem(virtualRoot);
@@ -64,6 +66,11 @@ namespace Umbraco.Web.SyncFileSystem
             _wrapped.AddFile(path, memoryCopy, overrideIfExists);
 
             SendMessages(Action.Add, GetUrl(path), memoryCopy);
+        }
+
+        public void AddFile(string path, string physicalPath, bool overrideIfExists = true, bool copy = false)
+        {
+            throw new NotImplementedException();
         }
 
         public IEnumerable<string> GetFiles(string path)
@@ -128,10 +135,20 @@ namespace Umbraco.Web.SyncFileSystem
                 Data = stream?.ToArray() ?? new byte[] { }
             };
 
-            ApplicationContext.Current.DatabaseContext.Database.Insert(dto);
+            using (var scope = Composing.Current.ScopeProvider.CreateScope())
+            {
+                scope.Database.Insert(dto);
+                scope.Complete();
+            }
 
-            LogHelper.Info<SyncFileSystemWrapper>("Sending file sync {0} for path {1}...", () => action, () => path);
-            Umbraco.Web.Cache.DistributedCache.Instance.Refresh(Umbraco.Web.Cache.FileSystemCacheRefresher.RefresherTypeId, dto.Id);
+            Composing.Current.Logger.Info(typeof(SyncFileSystemWrapper), "Sending file sync {0} for path {1}...", action, path);
+
+            Composing.Current.DistributedCache.Refresh(Cache.FileSystemCacheRefresher.UniqueId, dto.Id);
+        }
+
+        public long GetSize(string path)
+        {
+            return _wrapped.GetSize(path);
         }
 
         public enum Action

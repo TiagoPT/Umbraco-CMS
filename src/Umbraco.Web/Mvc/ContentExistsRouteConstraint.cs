@@ -7,7 +7,10 @@ using System.Web;
 using System.Web.Routing;
 
 using Umbraco.Core;
+
 using Umbraco.Core.Models;
+using Umbraco.Core.Models.PublishedContent;
+using Umbraco.Web.Composing;
 using Umbraco.Web.Routing;
 
 namespace Umbraco.Web.Mvc
@@ -26,8 +29,8 @@ namespace Umbraco.Web.Mvc
         }
 
         public bool Match(HttpContextBase httpContext, Route route, string parameterName, RouteValueDictionary values, RouteDirection routeDirection)
-        {
-            UmbracoContext umbracoContext = UmbracoContext.Current;
+        {            
+            var umbracoContext = Current.UmbracoContext;
             if (umbracoContext == null)
             {
                 return false;
@@ -44,21 +47,14 @@ namespace Umbraco.Web.Mvc
                 }
             }
 
-            var pcr = new PublishedContentRequest(
-                umbracoContext.CleanedUmbracoUrl,
-                umbracoContext.RoutingContext,
-                Core.Configuration.UmbracoConfig.For.UmbracoSettings().WebRouting,
-                s => System.Web.Security.Roles.Provider.GetRolesForUser(s));
+            var publishedRouter = Current.Factory.GetInstance<IPublishedRouter>();
+            var pubReq = publishedRouter.CreateRequest(umbracoContext);
 
-            var engine = new PublishedContentRequestEngine(Core.Configuration.UmbracoConfig.For.UmbracoSettings().WebRouting, pcr);
-            engine.FindDomain();
-            engine.FindPublishedContent();
-
-            if (pcr.HasPublishedContent)
+            if ( publishedRouter.TryRouteRequest(pubReq))
             {
-                return ConstraintShouldMatchForPage(pcr.PublishedContent);
+                return ConstraintShouldMatchForPage(pubReq.PublishedContent);
             }
-            else if (pcr.IsRedirect)
+            else if (pubReq.IsRedirect)
             {
                 return true;
             }
