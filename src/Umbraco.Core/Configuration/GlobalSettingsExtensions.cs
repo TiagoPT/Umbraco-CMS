@@ -47,5 +47,5 @@ namespace Umbraco.Core.Configuration
             return path.TrimStart('~').TrimStart('/').Replace('/', '-').Trim().ToLower();
         }
 
-    }
+                        }
 }
