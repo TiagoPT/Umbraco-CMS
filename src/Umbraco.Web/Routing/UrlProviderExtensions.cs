@@ -106,19 +106,19 @@ namespace Umbraco.Web.Routing
 
                 // if it's variant and culture is published, or if it's invariant, proceed
 
-            string url;
-            try
-            {
+                string url;
+                try
+                {
                     url = umbracoContext.UrlProvider.GetUrl(content.Id, culture: culture);
-            }
+                }
                 catch (Exception ex)
-            {
+                {
                     logger.Error<UrlProvider>(ex, "GetUrl exception.");
-                url = "#ex";
-            }
+                    url = "#ex";
+                }
 
                 switch (url)
-            {
+                {
                     // deal with 'could not get the url'
                     case "#":
                         yield return HandleCouldNotGetUrl(content, culture, contentService, textService);
@@ -143,12 +143,12 @@ namespace Umbraco.Web.Routing
         private static UrlInfo HandleCouldNotGetUrl(IContent content, string culture, IContentService contentService, ILocalizedTextService textService)
         {
             // document has a published version yet its url is "#" => a parent must be
-                // unpublished, walk up the tree until we find it, and report.
-                var parent = content;
-                do
-                {
+            // unpublished, walk up the tree until we find it, and report.
+            var parent = content;
+            do
+            {
                 parent = parent.ParentId > 0 ? contentService.GetParent(parent) : null;
-                }
+            }
             while (parent != null && parent.Published && (!parent.ContentType.VariesByCulture() || parent.IsCulturePublished(culture)));
 
             if (parent == null) // oops, internal error
@@ -159,42 +159,46 @@ namespace Umbraco.Web.Routing
 
             else // culture not published
                 return UrlInfo.Message(textService.Localize("content/parentCultureNotPublished", new[] {parent.Name}), culture);
-            }
+        }
 
         private static bool DetectCollision(IContent content, string url, string culture, UmbracoContext umbracoContext, IPublishedRouter publishedRouter, ILocalizedTextService textService, out UrlInfo urlInfo)
-            {
+        {
             // test for collisions on the 'main' url
-                var uri = new Uri(url.TrimEnd('/'), UriKind.RelativeOrAbsolute);
+            var uri = new Uri(url.TrimEnd('/'), UriKind.RelativeOrAbsolute);
             if (uri.IsAbsoluteUri == false) uri = uri.MakeAbsolute(umbracoContext.CleanedUmbracoUrl);
-                uri = UriUtility.UriToUmbraco(uri);
+            uri = UriUtility.UriToUmbraco(uri);
             var pcr = publishedRouter.CreateRequest(umbracoContext, uri);
             publishedRouter.TryRouteRequest(pcr);
 
             urlInfo = null;
 
-                if (pcr.HasPublishedContent == false)
-                {
+            if (pcr.HasPublishedContent == false)
+            {
                 urlInfo = UrlInfo.Message(textService.Localize("content/routeErrorCannotRoute"), culture);
                 return true;
-                }
-                else if (pcr.IgnorePublishedContentCollisions == false && pcr.PublishedContent.Id != content.Id && !url.Contains("#"))
+            }
+
+            if (pcr.IgnorePublishedContentCollisions)
+                return false;
+
+            if (pcr.PublishedContent.Id != content.Id && !url.Contains("#"))
+            {
+                var o = pcr.PublishedContent;
+                var l = new List<string>();
+                while (o != null)
                 {
-                    var o = pcr.PublishedContent;
-                        var l = new List<string>();
-                        while (o != null)
-                        {
                     l.Add(o.Name());
-                            o = o.Parent;
-                        }
-                        l.Reverse();
+                    o = o.Parent;
+                }
+                l.Reverse();
                 var s = "/" + string.Join("/", l) + " (id=" + pcr.PublishedContent.Id + ")";
 
                  urlInfo = UrlInfo.Message(textService.Localize("content/routeError", new[] { s }), culture);
                 return true;
-                    }
+            }
 
             // no collision
             return false;
-                }
-                }
+        }
+    }
 }
