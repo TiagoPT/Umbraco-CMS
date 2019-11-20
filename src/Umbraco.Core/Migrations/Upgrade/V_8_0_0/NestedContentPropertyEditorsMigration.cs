@@ -1,5 +1,6 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -102,12 +103,21 @@ namespace Umbraco.Core.Migrations.Upgrade.V_8_0_0
                 return false;
 
             var elements = JsonConvert.DeserializeObject<List<JObject>>(inputValue);
-            foreach(var element in elements)
+            foreach (var element in elements)
             {
                 var elementTypeAlias = element["ncContentTypeAlias"]?.ToObject<string>();
-                if (string.IsNullOrEmpty(elementTypeAlias))
-                    continue;
-                changed |= UpdateElement(element, elementTypeAlias);
+                try
+                {
+                    if (string.IsNullOrEmpty(elementTypeAlias))
+                        continue;
+                    changed |= UpdateElement(element, elementTypeAlias);
+                }
+                catch (JsonReaderException e)
+                {
+                    Logger.Error<NestedContentPropertyEditorsMigration>(e, "Method: UpdateNestedContent #1 | Error deserializing element with inputValue: {inputValue} to new value: {newValue} and elements: {elements}", inputValue, newValue, elements.Select(e => e?.ToString() ?? string.Empty));
+
+                    Logger.Error<NestedContentPropertyEditorsMigration>(e, "Method: UpdateNestedContent #2 | Error deserializing curr element: {currElement} with alias: {currElementAlias}", element, elementTypeAlias);
+                }
             }
 
             if (changed)
@@ -119,58 +129,65 @@ namespace Umbraco.Core.Migrations.Upgrade.V_8_0_0
         private bool UpdateElement(JObject element, string elementTypeAlias)
         {
             bool changed = false;
-
-            var elementTypeId = _elementTypeIds[elementTypeAlias];
-            _elementTypesInUse.Add(elementTypeId);
-
-            var propertyValues = element.ToObject<Dictionary<string, string>>();
-            if (!propertyValues.TryGetValue("key", out var keyo)
-                || !Guid.TryParse(keyo.ToString(), out var key))
+            try
             {
-                changed = true;
-                element["key"] = Guid.NewGuid();
-            }
+                var elementTypeId = _elementTypeIds[elementTypeAlias];
+                _elementTypesInUse.Add(elementTypeId);
 
-            var propertyTypes = GetPropertyTypes(elementTypeId);
-
-            foreach (var pt in propertyTypes)
-            {
-                if (!propertyValues.ContainsKey(pt.Alias) || String.IsNullOrWhiteSpace(propertyValues[pt.Alias]))
-                    continue;                
-
-                var propertyValue = propertyValues[pt.Alias];
-
-                switch (pt.DataTypeDto.EditorAlias)
+                var propertyValues = element.ToObject<Dictionary<string, string>>();
+                if (!propertyValues.TryGetValue("key", out var keyo)
+                    || !Guid.TryParse(keyo.ToString(), out var key))
                 {
-                    case Constants.PropertyEditors.Aliases.RadioButtonList:
-                    case Constants.PropertyEditors.Aliases.CheckBoxList:
-                    case Constants.PropertyEditors.Aliases.DropDownListFlexible:
-                        var config = (ValueListConfiguration)_valueListConfigEditor.FromDatabase(pt.DataTypeDto.Configuration);
-                        bool isMultiple = true;
-                        if (pt.DataTypeDto.EditorAlias == Constants.PropertyEditors.Aliases.RadioButtonList)
-                            isMultiple = false;
-                        element[pt.Alias] = UpdateValueList(propertyValue, config, isMultiple);
-                        changed = true;
-                        break;
-
-                    case Constants.PropertyEditors.Aliases.NestedContent:
-                        if ( UpdateNestedContent(propertyValue, out string newNestedContentValue))
-                        {
-                            element[pt.Alias] = newNestedContentValue;
-                            changed = true;
-                        }
-                        break;
-
-                    case Constants.PropertyEditors.Aliases.MultiUrlPicker:                        
-                        if (string.IsNullOrWhiteSpace(propertyValue))
-                            continue;
-                        element[pt.Alias] = ConvertRelatedLinksToMultiUrlPicker(propertyValue);
-                        changed = true;
-                        break;
+                    changed = true;
+                    element["key"] = Guid.NewGuid();
                 }
-            }
 
-            return changed;
+                var propertyTypes = GetPropertyTypes(elementTypeId);
+
+                foreach (var pt in propertyTypes)
+                {
+                    if (!propertyValues.ContainsKey(pt.Alias) || String.IsNullOrWhiteSpace(propertyValues[pt.Alias]))
+                        continue;
+
+                    var propertyValue = propertyValues[pt.Alias];
+
+                    switch (pt.DataTypeDto.EditorAlias)
+                    {
+                        case Constants.PropertyEditors.Aliases.RadioButtonList:
+                        case Constants.PropertyEditors.Aliases.CheckBoxList:
+                        case Constants.PropertyEditors.Aliases.DropDownListFlexible:
+                            var config = (ValueListConfiguration)_valueListConfigEditor.FromDatabase(pt.DataTypeDto.Configuration);
+                            bool isMultiple = true;
+                            if (pt.DataTypeDto.EditorAlias == Constants.PropertyEditors.Aliases.RadioButtonList)
+                                isMultiple = false;
+                            element[pt.Alias] = UpdateValueList(propertyValue, config, isMultiple);
+                            changed = true;
+                            break;
+
+                        case Constants.PropertyEditors.Aliases.NestedContent:
+                            if (UpdateNestedContent(propertyValue, out string newNestedContentValue))
+                            {
+                                element[pt.Alias] = newNestedContentValue;
+                                changed = true;
+                            }
+                            break;
+
+                        case Constants.PropertyEditors.Aliases.MultiUrlPicker:
+                            if (string.IsNullOrWhiteSpace(propertyValue))
+                                continue;
+                            element[pt.Alias] = ConvertRelatedLinksToMultiUrlPicker(propertyValue);
+                            changed = true;
+                            break;
+                    }
+                }
+
+                return changed;
+            }
+            catch (JsonReaderException e)
+            {
+                Logger.Error<NestedContentPropertyEditorsMigration>(e, "Method: UpdateElement | Error deserializing element with elementTypeAlias: {elementTypeAlias} and value: {element}", elementTypeAlias, element);
+                throw;
+            }
         }
 
         private List<PropertyTypeDto> GetPropertyTypes(int elementTypeId)
